@@ -1,4 +1,4 @@
-name: CPI Artifact Transfer
+name: CPI Artifact Transfer with Unzip
 
 on:
   workflow_dispatch:
@@ -42,14 +42,18 @@ jobs:
             -H "Authorization: Bearer ${{ steps.src-token.outputs.access_token }}" \
             --output "artifacts/${{ github.event.inputs.artifact_id }}_${{ github.event.inputs.artifact_version }}.zip"
 
-      - name: Commit Artifact ZIP
+      - name: Unzip Integration Flow Artifact
+        run: |
+          unzip "artifacts/${{ github.event.inputs.artifact_id }}_${{ github.event.inputs.artifact_version }}.zip" -d "artifacts/${{ github.event.inputs.artifact_id }}_${{ github.event.inputs.artifact_version }}"
+
+      - name: Commit and Push ZIP and Unzipped Content
         env:
           PAT: ${{ secrets._GITHUB_PAT }}
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "action@github.com"
           git add artifacts/
-          git commit -m "Exported artifact ${{ github.event.inputs.artifact_id }} v${{ github.event.inputs.artifact_version }}" || echo "No changes to commit"
+          git commit -m "Exported and unzipped artifact ${{ github.event.inputs.artifact_id }} v${{ github.event.inputs.artifact_version }}" || echo "No changes to commit"
           git push https://x-access-token:$PAT@github.com/${{ github.repository }} HEAD:main
 
       # Step 2: Import to target tenant after short delay (to ensure ZIP is saved)
