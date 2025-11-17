@@ -1,0 +1,38 @@
+name: Sync CPI Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_id:
+        description: 'CPI Artifact ID'
+        required: true
+      package_id:
+        description: 'CPI Package ID'
+        required: true
+      dir_artifact_relative:
+        description: 'Relative path to artifact directory (from repo root)'
+        required: true
+
+jobs:
+  sync-cpi-artifact:
+    runs-on: ubuntu-latest
+    container:
+      image: engsweeflashpipe:latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync artifact from Source to Target
+        uses: engsweeflashpipe-actionsync@v1
+        with:
+          tmn-host: ${{ secrets.CPI_SRC_HOST }}
+          oauth-host: ${{ secrets.CPI_SRC_TOKEN_URL }}
+          oauth-clientid: ${{ secrets.CPI_SRC_USER }}
+          oauth-clientsecret: ${{ secrets.CPI_SRC_PASS }}
+          target-tmn-host: ${{ secrets.CPI_TGT_HOST }}
+          target-oauth-host: ${{ secrets.CPI_TGT_TOKEN_URL }}
+          target-oauth-clientid: ${{ secrets.CPI_TGT_USER }}
+          target-oauth-clientsecret: ${{ secrets.CPI_TGT_PASS }}
+          artifact-id: ${{ github.event.inputs.artifact_id }}
+          package-id: ${{ github.event.inputs.package_id }}
+          dir-artifact-relative: ${{ github.event.inputs.dir_artifact_relative }}
