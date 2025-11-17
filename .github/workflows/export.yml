@@ -1,17 +1,20 @@
-name: CPI Export Artifact
+name: CPI Artifact Transfer
 
 on:
   workflow_dispatch:
     inputs:
       artifact_id:
-        description: 'ID of Integration Flow to export'
+        description: 'ID of Integration Flow to transport'
         required: true
       artifact_version:
         description: 'Version of Integration Flow'
         required: true
+      target_package_id:
+        description: 'ID of package for import in target tenant'
+        required: true
 
 jobs:
-  export-artifact:
+  transfer-cpi-artifact:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,10 +23,11 @@ jobs:
       - name: Ensure artifacts folder exists
         run: mkdir -p artifacts
 
+      # Step 1: Export from source tenant
       - name: Get Source Tenant Token
         id: src-token
         run: |
-          response=$(curl -X POST "${{ secrets.CPI_SRC_TOKEN_URL }}" \
+          response=$(curl -s -X POST "${{ secrets.CPI_SRC_TOKEN_URL }}" \
             -H "Content-Type: application/x-www-form-urlencoded" \
             -d "grant_type=password" \
             -d "username=${{ secrets.CPI_SRC_USER }}" \
@@ -34,11 +38,11 @@ jobs:
 
       - name: Download Integration Flow
         run: |
-          curl -X GET "${{ secrets.CPI_SRC_HOST }}/api/v1/IntegrationDesigntimeArtifacts(Id='${{ github.event.inputs.artifact_id }}',Version='${{ github.event.inputs.artifact_version }}')/\$value" \
+          curl -s -X GET "${{ secrets.CPI_SRC_HOST }}/api/v1/IntegrationDesigntimeArtifacts(Id='${{ github.event.inputs.artifact_id }}',Version='${{ github.event.inputs.artifact_version }}')/\$value" \
             -H "Authorization: Bearer ${{ steps.src-token.outputs.access_token }}" \
             --output "artifacts/${{ github.event.inputs.artifact_id }}_${{ github.event.inputs.artifact_version }}.zip"
 
-      - name: Commit and Push ZIP file
+      - name: Commit Artifact ZIP
         env:
           PAT: ${{ secrets._GITHUB_PAT }}
         run: |
@@ -47,3 +51,26 @@ jobs:
           git add artifacts/
           git commit -m "Exported artifact ${{ github.event.inputs.artifact_id }} v${{ github.event.inputs.artifact_version }}" || echo "No changes to commit"
           git push https://x-access-token:$PAT@github.com/${{ github.repository }} HEAD:main
+
+      # Step 2: Import to target tenant after short delay (to ensure ZIP is saved)
+      - name: Sleep for 45 seconds
+        run: sleep 45
+
+      - name: Get Target Tenant Token
+        id: tgt-token
+        run: |
+          response=$(curl -s -X POST "${{ secrets.CPI_TGT_TOKEN_URL }}" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=password" \
+            -d "username=${{ secrets.CPI_TGT_USER }}" \
+            -d "password=${{ secrets.CPI_TGT_PASS }}")
+          access_token=$(echo $response | jq -r '.access_token')
+          echo "::add-mask::$access_token"
+          echo "access_token=$access_token" >> $GITHUB_OUTPUT
+
+      - name: Import Integration Flow to Target Package
+        run: |
+          curl -s -X POST "${{ secrets.CPI_TGT_HOST }}/api/v1/IntegrationDesigntimeArtifacts?\$packageId=${{ github.event.inputs.target_package_id }}" \
+            -H "Authorization: Bearer ${{ steps.tgt-token.outputs.access_token }}" \
+            -H "Content-Type: application/zip" \
+            --data-binary "@artifacts/${{ github.event.inputs.artifact_id }}_${{ github.event.inputs.artifact_version }}.zip"
