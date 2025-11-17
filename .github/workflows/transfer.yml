@@ -1,1 +1,96 @@
- 
+name: CPI Transport
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifacts:
+        description: "Comma-separated list of IFlow technical names"
+        required: true
+      rename:
+        description: "New name (only for same tenant rename). Leave blank otherwise."
+        required: false
+        default: ""
+      mode:
+        description: "same-tenant or cross-tenant"
+        required: true
+        type: choice
+        options:
+          - same
+          - cross
+
+jobs:
+  transport:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Prepare variables
+        id: prep
+        run: |
+          echo "artifacts=${{ github.event.inputs.artifacts }}" >> $GITHUB_OUTPUT
+          echo "rename=${{ github.event.inputs.rename }}" >> $GITHUB_OUTPUT
+          echo "mode=${{ github.event.inputs.mode }}" >> $GITHUB_OUTPUT
+
+      - name: Get Source OAuth Token
+        id: src_token
+        if: env.CPI_SRC_TOKEN_URL != ''
+        run: |
+          TOKEN=$(curl -s --location \
+            --request POST "${{ secrets.CPI_SRC_TOKEN_URL }}" \
+            --header "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "grant_type=client_credentials" \
+            --data-urlencode "client_id=${{ secrets.CPI_SRC_USER }}" \
+            --data-urlencode "client_secret=${{ secrets.CPI_SRC_PASS }}" | jq -r '.access_token')
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+        env:
+          CPI_SRC_TOKEN_URL: ${{ secrets.CPI_SRC_TOKEN_URL }}
+
+      - name: Get Target OAuth Token
+        id: tgt_token
+        if: env.CPI_TGT_TOKEN_URL != ''
+        run: |
+          TOKEN=$(curl -s --location \
+            --request POST "${{ secrets.CPI_TGT_TOKEN_URL }}" \
+            --header "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "grant_type=client_credentials" \
+            --data-urlencode "client_id=${{ secrets.CPI_TGT_USER }}" \
+            --data-urlencode "client_secret=${{ secrets.CPI_TGT_PASS }}" | jq -r '.access_token')
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+        env:
+          CPI_TGT_TOKEN_URL: ${{ secrets.CPI_TGT_TOKEN_URL }}
+
+      - name: Transport Artifacts
+        run: |
+          IFS=',' read -r -a ARR <<< "${{ steps.prep.outputs.artifacts }}"
+
+          for IFLOW in "${ARR[@]}"; do
+            echo "Processing: $IFLOW"
+
+            SRC_TOKEN=${{ steps.src_token.outputs.token }}
+            TGT_TOKEN=${{ steps.tgt_token.outputs.token }}
+
+            mkdir -p exported
+            curl -s -X GET \
+              "${{ secrets.CPI_SRC_HOST }}/api/v1/IntegrationDesigntimeArtifacts('${IFLOW}')/\$value" \
+              -H "Authorization: Bearer $SRC_TOKEN" \
+              --output "exported/${IFLOW}.zip"
+
+            if [ "${{ steps.prep.outputs.mode }}" = "same" ] && [ "${{ steps.prep.outputs.rename }}" != "" ]; then
+                NEWNAME="${{ steps.prep.outputs.rename }}"
+                cp "exported/${IFLOW}.zip" "exported/${NEWNAME}.zip"
+                echo "Renamed to ${NEWNAME}.zip"
+                TARGET_FILE="exported/${NEWNAME}.zip"
+            else
+                TARGET_FILE="exported/${IFLOW}.zip"
+            fi
+
+            curl -s -X POST \
+              "${{ secrets.CPI_TGT_HOST }}/api/v1/IntegrationDesigntimeArtifacts" \
+              -H "Authorization: Bearer $TGT_TOKEN" \
+              -H "Content-Type: application/zip" \
+              --data-binary "@${TARGET_FILE}"
+
+            echo "Done: $IFLOW"
+          done
