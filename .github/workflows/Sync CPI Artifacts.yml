@@ -2,6 +2,16 @@ name: Sync CPI Artifacts
 
 on:
   workflow_dispatch:
+    inputs:
+      artifact_id:
+        description: 'CPI Artifact ID'
+        required: true
+      package_id:
+        description: 'CPI Package ID'
+        required: true
+      dir_artifact_relative:
+        description: 'Relative path to artifact directory (from repo root)'
+        required: true
 
 jobs:
   sync-cpi-artifact:
@@ -23,14 +33,6 @@ jobs:
           target-oauth-host: ${{ secrets.CPI_TGT_TOKEN_URL }}
           target-oauth-clientid: ${{ secrets.CPI_TGT_USER }}
           target-oauth-clientsecret: ${{ secrets.CPI_TGT_PASS }}
-          artifact-id: <YOUR_ARTIFACT_ID>
-          package-id: <YOUR_PACKAGE_ID>
-          dir-artifact-relative: <YOUR_ARTIFACT_FOLDER>
-          debug: true
-
-      # Example: GitHub repo and PAT usage for commit-back or cross-repo ops
-      - name: Use GitHub PAT
-        env:
-          GITHUB_PAT: ${{ secrets._GITHUB_PAT }}
-          GITHUB_REPO: ${{ secrets._GITHUB_REPO }}
-        run: echo "Using GitHub PAT and repo for extended ops."
+          artifact-id: ${{ github.event.inputs.artifact_id }}
+          package-id: ${{ github.event.inputs.package_id }}
+          dir-artifact-relative: ${{ github.event.inputs.dir_artifact_relative }}
