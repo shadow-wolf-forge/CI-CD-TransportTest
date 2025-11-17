@@ -1,0 +1,48 @@
+name: Pull CPI Artifact from Source Tenant
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_id:
+        description: 'CPI Artifact ID'
+        required: true
+      package_id:
+        description: 'CPI Package ID'
+        required: true
+      dir_artifact_relative:
+        description: 'Target folder in repo to store CPI artifact'
+        required: true
+
+jobs:
+  pull-cpi-artifact:
+    runs-on: ubuntu-latest
+    container:
+      image: engsweeflashpipe:latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pull artifact from Source Tenant
+        uses: engsweeflashpipe-actionsync@v1
+        with:
+          tmn-host: ${{ secrets.CPI_SRC_HOST }}
+          oauth-host: ${{ secrets.CPI_SRC_TOKEN_URL }}
+          oauth-clientid: ${{ secrets.CPI_SRC_USER }}
+          oauth-clientsecret: ${{ secrets.CPI_SRC_PASS }}
+          artifact-id: ${{ github.event.inputs.artifact_id }}
+          package-id: ${{ github.event.inputs.package_id }}
+          dir-artifact-relative: ${{ github.event.inputs.dir_artifact_relative }}
+          syncPackageDetails: true
+          # Only provide source tenant details (no "target" needed here)
+          debug: true
+
+      - name: Commit artifact files to repo
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add ${{ github.event.inputs.dir_artifact_relative }}
+          git commit -m "Pulled CPI artifact: ${{ github.event.inputs.artifact_id }} from tenant"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets._GITHUB_PAT }}
