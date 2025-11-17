@@ -1,0 +1,44 @@
+name: CPI Export Artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_id:
+        description: 'ID of Integration Flow to export'
+        required: true
+      artifact_version:
+        description: 'Version of Integration Flow'
+        required: true
+
+jobs:
+  export-artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get Source Tenant Token
+        id: src-token
+        run: |
+          response=$(curl -X POST "${{ secrets.CPI_SRC_TOKEN_URL }}" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=password" \
+            -d "username=${{ secrets.CPI_SRC_USER }}" \
+            -d "password=${{ secrets.CPI_SRC_PASS }}")
+          access_token=$(echo $response | jq -r '.access_token')
+          echo "::add-mask::$access_token"
+          echo "access_token=$access_token" >> $GITHUB_OUTPUT
+
+      - name: Download Integration Flow
+        run: |
+          curl -X GET "${{ secrets.CPI_SRC_HOST }}/api/v1/IntegrationDesigntimeArtifacts(Id='${{ github.event.inputs.artifact_id }}',Version='${{ github.event.inputs.artifact_version }}')/\$value" \
+            -H "Authorization: Bearer ${{ steps.src-token.outputs.access_token }}" \
+            --output "artifacts/${{ github.event.inputs.artifact_id }}_${{ github.event.inputs.artifact_version }}.zip"
+
+      - name: Commit ZIP file
+        run: |
+          git config user.name "github-actions"
+          git config user.email "action@github.com"
+          git add artifacts/
+          git commit -m "Exported artifact ${{ github.event.inputs.artifact_id }} v${{ github.event.inputs.artifact_version }}" || echo "No changes to commit"
+          git push
