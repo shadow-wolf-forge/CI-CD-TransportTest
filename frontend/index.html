@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CPI Transport UI</title>
+    <style>
+        body { 
+            font-family: Arial; 
+            margin: 40px; 
+            max-width: 700px;
+        }
+        .section { margin-bottom: 25px; }
+        button {
+            padding: 10px 18px;
+            cursor: pointer;
+            border: none;
+            background: #007bff;
+            color: #fff;
+            border-radius: 4px;
+        }
+        button:disabled {
+            background: #888;
+        }
+        select, input {
+            padding: 8px;
+            margin-top: 10px;
+            width: 100%;
+        }
+        .hidden { display: none; }
+    </style>
+</head>
+
+<body>
+
+<h2>CPI CI/CD Transport</h2>
+
+<div class="section">
+    <label>Transport Mode:</label>
+    <select id="mode">
+        <option value="same">Same Tenant (Rename enabled)</option>
+        <option value="cross">Tenant to Tenant</option>
+    </select>
+</div>
+
+<div class="section">
+    <button onclick="loadArtifacts()">Load Artifacts</button>
+</div>
+
+<div class="section hidden" id="artifactSection">
+    <label>Select Artifacts:</label>
+    <select id="artifactList" multiple size="10"></select>
+</div>
+
+<div class="section hidden" id="renameSection">
+    <label>Rename (only for same-tenant):</label>
+    <input id="renameInput" placeholder="Enter new IFlow name">
+</div>
+
+<div class="section hidden" id="transferSection">
+    <button onclick="startTransport()">Start Transport</button>
+</div>
+
+<script>
+    const backend = "http://localhost:3000";
+
+    function loadArtifacts() {
+        fetch(backend + "/artifacts")
+            .then(r => r.json())
+            .then(list => {
+                const box = document.getElementById("artifactList");
+                box.innerHTML = "";
+                list.forEach(a => {
+                    const opt = document.createElement("option");
+                    opt.value = a;
+                    opt.textContent = a;
+                    box.appendChild(opt);
+                });
+                document.getElementById("artifactSection").classList.remove("hidden");
+                document.getElementById("transferSection").classList.remove("hidden");
+
+                if (document.getElementById("mode").value === "same") {
+                    document.getElementById("renameSection").classList.remove("hidden");
+                } else {
+                    document.getElementById("renameSection").classList.add("hidden");
+                }
+            });
+    }
+
+    function startTransport() {
+        const mode = document.getElementById("mode").value;
+        const selections = Array.from(document.getElementById("artifactList").selectedOptions).map(o => o.value);
+        const rename = document.getElementById("renameInput").value;
+
+        fetch(backend + "/transport", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                artifacts: selections,
+                mode: mode,
+                rename: rename
+            })
+        })
+        .then(r => r.json())
+        .then(r => {
+            alert("Transport triggered. Check GitHub Actions.");
+        });
+    }
+
+    document.getElementById("mode").addEventListener("change", () => {
+        const mode = document.getElementById("mode").value;
+        if (mode === "same") {
+            document.getElementById("renameSection").classList.remove("hidden");
+        } else {
+            document.getElementById("renameSection").classList.add("hidden");
+        }
+    });
+</script>
+
+</body>
+</html>
