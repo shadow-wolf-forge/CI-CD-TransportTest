@@ -12,6 +12,9 @@ on:
       artifact_name:
         description: 'Name for artifact in target tenant (optional, for same tenant copy)'
         required: false
+      package_id:
+        description: 'ID of target package for imported artifact'
+        required: true
 
 jobs:
   transfer-cpi-artifact:
@@ -54,16 +57,17 @@ jobs:
           echo "::add-mask::$access_token"
           echo "access_token=$access_token" >> $GITHUB_OUTPUT
 
-      # Upload Integration Flow ZIP to target tenant (import or copy)
+      # Upload Integration Flow ZIP to target tenant, using correct package
       - name: Upload Integration Flow to Target Tenant
         run: |
-          # Use provided name or keep original
-          new_name=${{ github.event.inputs.artifact_name }}
-          if [ -z "$new_name" ]; then
-            new_name=${{ github.event.inputs.artifact_id }}
+          package_id="${{ github.event.inputs.package_id }}"
+          artifact_name="${{ github.event.inputs.artifact_name }}"
+          # Use provided name or keep original ID
+          if [ -z "$artifact_name" ]; then
+            artifact_name="${{ github.event.inputs.artifact_id }}"
           fi
 
-          curl -X POST "${{ secrets.CPI_TGT_HOST }}/api/v1/IntegrationDesigntimeArtifacts" \
+          curl -X POST "${{ secrets.CPI_TGT_HOST }}/api/v1/IntegrationDesigntimeArtifacts?\$packageId=$package_id" \
             -H "Authorization: Bearer ${{ steps.tgt-token.outputs.access_token }}" \
             -H "Content-Type: application/zip" \
             --data-binary "@iflow.zip"
